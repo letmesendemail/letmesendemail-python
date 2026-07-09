@@ -1,5 +1,3 @@
-import httpx
-import pytest
 from letmesendemail import LetMeSendEmail
 
 CREATE_FIXTURE = {
@@ -10,9 +8,7 @@ CREATE_FIXTURE = {
     "phone": "11231231234",
     "is_globally_unsubscribed": False,
     "created_at": "2026-06-23T17:45:26.000+00:00",
-    "categories": [
-        {"id": "c1", "name": "ea labore omnis", "slug": "ea-labore-omnis"}
-    ],
+    "categories": [{"id": "c1", "name": "ea labore omnis", "slug": "ea-labore-omnis"}],
 }
 
 UPDATE_FIXTURE = {"id": "01kvtsch98rxyxwaxwx2fbpsbp"}

@@ -1,5 +1,3 @@
-import httpx
-import pytest
 from letmesendemail import LetMeSendEmail
 
 CREATE_FIXTURE = {
@@ -10,8 +8,16 @@ CREATE_FIXTURE = {
 
 LIST_FIXTURE = {
     "data": [
-        {"id": "01kvtkgnwnwszdgs6w4ks0cqy3", "name": "quisquam temporibus ullam", "slug": "quisquam-temporibus-ullam"},
-        {"id": "01kvtkgnwmksj0khdcbv31r2cy", "name": "nisi quam officiis", "slug": "nisi-quam-officiis"},
+        {
+            "id": "01kvtkgnwnwszdgs6w4ks0cqy3",
+            "name": "quisquam temporibus ullam",
+            "slug": "quisquam-temporibus-ullam",
+        },
+        {
+            "id": "01kvtkgnwmksj0khdcbv31r2cy",
+            "name": "nisi quam officiis",
+            "slug": "nisi-quam-officiis",
+        },
     ],
     "pagination": {"has_more": True, "per_page": 2, "fetched": 2, "total": 100},
 }

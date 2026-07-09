@@ -1,5 +1,3 @@
-import httpx
-import pytest
 from letmesendemail import LetMeSendEmail
 
 CREATE_FIXTURE = {
