@@ -107,7 +107,6 @@ pytest
 
 | Python | Supported |
 |--------|-----------|
-| 3.9 | Yes |
 | 3.10 | Yes |
 | 3.11 | Yes |
 | 3.12 | Yes |
