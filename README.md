@@ -2,6 +2,12 @@
 
 The official Python SDK for the [letmesend.email](https://letmesend.email/) API.
 
+## Full Documentation
+
+See the comprehensive [user manual](docs/docs.md) for complete documentation of
+every resource, configuration option, retry behavior, error handling, webhook
+verification, and detailed examples.
+
 ## Installation
 
 ```bash

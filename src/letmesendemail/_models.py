@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, TypedDict
 
 
@@ -14,6 +14,10 @@ class PaginationInfo:
     per_page: int = 0
     fetched: int = 0
     total: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the pagination metadata as a dictionary."""
+        return asdict(self)
 
 
 # ── Attachment request types ──
@@ -48,6 +52,10 @@ class SendEmailResponse:
     restricted_emails: list[str] = field(default_factory=list)
     duplicate: bool = False
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the response data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class VerifyEmailResponse:
@@ -65,6 +73,10 @@ class VerifyEmailResponse:
     valid_syntax: bool = False
     belongs_to: str | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the verification result as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class EmailListItem:
@@ -80,6 +92,10 @@ class EmailListItem:
     recipients_count: int = 0
     attachments_count: int = 0
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the email list item as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class EmailListResponse:
@@ -87,6 +103,10 @@ class EmailListResponse:
 
     data: list[EmailListItem] = field(default_factory=list)
     pagination: PaginationInfo = field(default_factory=PaginationInfo)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full list response as a dictionary."""
+        return asdict(self)
 
 
 @dataclass
@@ -112,6 +132,10 @@ class Recipient:
     delivered_at: str | None = None
     sent_at: str | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the recipient data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class EmailAttachment:
@@ -124,6 +148,10 @@ class EmailAttachment:
     content_disposition: str = ""
     size: int = 0
     download_url: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the attachment data as a dictionary."""
+        return asdict(self)
 
 
 @dataclass
@@ -142,6 +170,10 @@ class ShowEmailResponse:
     recipients: list[Recipient] = field(default_factory=list)
     attachments: list[EmailAttachment] = field(default_factory=list)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full email detail as a dictionary."""
+        return asdict(self)
+
 
 # ── Domains ──
 
@@ -155,6 +187,10 @@ class DomainItem:
     status: str = ""
     created_at: str = ""
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the domain data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class DomainListResponse:
@@ -163,6 +199,10 @@ class DomainListResponse:
     data: list[DomainItem] = field(default_factory=list)
     pagination: PaginationInfo = field(default_factory=PaginationInfo)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full domain list response as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class StatusResponse:
@@ -170,6 +210,10 @@ class StatusResponse:
 
     status: str = ""
     message: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the status response as a dictionary."""
+        return asdict(self)
 
 
 # ── Contacts ──
@@ -189,12 +233,20 @@ class ContactItem:
     categories: list[dict[str, Any]] = field(default_factory=list)
     email_topics: list[dict[str, Any]] = field(default_factory=list)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the contact data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class ContactUpdateResponse:
     """Response from update — fixture returns only { id }."""
 
     id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the update response as a dictionary."""
+        return asdict(self)
 
 
 @dataclass
@@ -203,6 +255,10 @@ class ContactListResponse:
 
     data: list[ContactItem] = field(default_factory=list)
     pagination: PaginationInfo = field(default_factory=PaginationInfo)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full contact list response as a dictionary."""
+        return asdict(self)
 
 
 # ── Contact Categories ──
@@ -216,6 +272,10 @@ class ContactCategoryItem:
     name: str = ""
     slug: str = ""
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the category data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class ContactCategoryListResponse:
@@ -223,6 +283,10 @@ class ContactCategoryListResponse:
 
     data: list[ContactCategoryItem] = field(default_factory=list)
     pagination: PaginationInfo = field(default_factory=PaginationInfo)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full category list response as a dictionary."""
+        return asdict(self)
 
 
 # ── Email Topics ──
@@ -241,6 +305,10 @@ class EmailTopicItem:
     created_at: str = ""
     domain: dict[str, Any] | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return the topic data as a dictionary."""
+        return asdict(self)
+
 
 @dataclass
 class EmailTopicListResponse:
@@ -248,3 +316,7 @@ class EmailTopicListResponse:
 
     data: list[EmailTopicItem] = field(default_factory=list)
     pagination: PaginationInfo = field(default_factory=PaginationInfo)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the full topic list response as a dictionary."""
+        return asdict(self)
