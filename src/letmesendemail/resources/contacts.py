@@ -1,11 +1,22 @@
+"""Contacts resource for the letmesend.email SDK."""
+
 from __future__ import annotations
 
 from typing import Any, Callable
+from urllib.parse import urlencode
 
-from letmesendemail._models import ContactItem, ContactListResponse, PaginationInfo, StatusResponse
+from letmesendemail._models import (
+    ContactItem,
+    ContactListResponse,
+    ContactUpdateResponse,
+    PaginationInfo,
+    StatusResponse,
+)
 
 
 class ContactsResource:
+    """Access the Contacts API."""
+
     def __init__(self, request_fn: Callable[..., dict[str, Any]]) -> None:
         self._request = request_fn
 
@@ -19,6 +30,7 @@ class ContactsResource:
         categories: list[str] | None = None,
         email_topics: list[str] | None = None,
     ) -> ContactItem:
+        """Create a contact."""
         body: dict[str, Any] = {"email": email}
         if first_name is not None:
             body["first_name"] = first_name
@@ -32,7 +44,6 @@ class ContactsResource:
             body["categories"] = categories
         if email_topics is not None:
             body["email_topics"] = email_topics
-
         data = self._request("POST", "/contacts", body)
         return _contact_from_dict(data)
 
@@ -42,6 +53,7 @@ class ContactsResource:
         after: str | None = None,
         before: str | None = None,
     ) -> ContactListResponse:
+        """List contacts with optional pagination."""
         params: dict[str, str] = {}
         if per_page is not None:
             params["per_page"] = str(per_page)
@@ -49,10 +61,7 @@ class ContactsResource:
             params["after"] = after
         if before is not None:
             params["before"] = before
-
-        query = "&".join(f"{k}={v}" for k, v in params.items())
-        path = f"/contacts?{query}" if query else "/contacts"
-
+        path = f"/contacts?{urlencode(params)}" if params else "/contacts"
         data = self._request("GET", path)
         pagination = data.get("pagination", {})
         return ContactListResponse(
@@ -66,6 +75,7 @@ class ContactsResource:
         )
 
     def get(self, id: str) -> ContactItem:
+        """Get a contact by ID."""
         data = self._request("GET", f"/contacts/{id}")
         return _contact_from_dict(data)
 
@@ -80,7 +90,8 @@ class ContactsResource:
         email_topics: list[str] | None = None,
         sync_categories: bool | None = None,
         sync_email_topics: bool | None = None,
-    ) -> ContactItem:
+    ) -> ContactUpdateResponse:
+        """Update a contact. Returns only { id } per fixture."""
         body: dict[str, Any] = {}
         if first_name is not None:
             body["first_name"] = first_name
@@ -98,11 +109,11 @@ class ContactsResource:
             body["sync_categories"] = sync_categories
         if sync_email_topics is not None:
             body["sync_email_topics"] = sync_email_topics
-
         data = self._request("PUT", f"/contacts/{id}", body)
-        return _contact_from_dict(data)
+        return ContactUpdateResponse(id=data.get("id", ""))
 
     def delete(self, id: str) -> StatusResponse:
+        """Delete a contact."""
         data = self._request("DELETE", f"/contacts/{id}")
         return StatusResponse(status=data.get("status", ""))
 

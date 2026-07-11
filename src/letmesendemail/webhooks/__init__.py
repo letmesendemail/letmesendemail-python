@@ -1,3 +1,5 @@
+"""Webhook signature verification."""
+
 from __future__ import annotations
 
 import base64
@@ -5,7 +7,7 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from letmesendemail._errors import WebhookSigningError, WebhookVerificationError
 
@@ -20,30 +22,35 @@ TOLERANCE_SECONDS = 300
 
 
 def _resolve_header(
-    headers: dict[str, str | list[str]],
+    headers: Mapping[str, str | list[str]],
     name: str,
 ) -> str | None:
+    """Resolve a header value with case-insensitive and HTTP_ prefix fallback."""
     lower = name.lower()
-    candidates = [
-        lower,
-        f"http_{name.replace('-', '_').lower()}",
-    ]
+    underscore = lower.replace("-", "_")
+    candidates: list[str] = []
+    for key in headers:
+        key_lower = key.lower().replace("-", "_")
+        if key_lower == underscore or key_lower == f"http_{underscore}":
+            candidates.append(key)
     for key in candidates:
-        raw = headers.get(key)
-        if raw is not None and raw != "":
-            if isinstance(raw, list) and len(raw) > 0:
-                return raw[0]
-            if isinstance(raw, str):
-                return raw
+        raw = headers[key]
+        if isinstance(raw, list) and raw:
+            val = raw[0]
+            if val:
+                return val
+        elif isinstance(raw, str) and raw:
+            return raw
     return None
 
 
 def verify_webhook(
     payload: str,
-    headers: dict[str, str | list[str]],
+    headers: dict[str, str | list[str]] | Mapping[str, str | list[str]],
     secret: str,
     tolerance: int = TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
+    """Verify the signature of a webhook payload."""
     resolved: dict[str, str] = {}
     for header_name in REQUIRED_HEADERS:
         value = _resolve_header(headers, header_name)
@@ -56,32 +63,33 @@ def verify_webhook(
         raise WebhookVerificationError("Webhook timestamp is not numeric.")
 
     timestamp = int(timestamp_str)
-    now = int(time.time())
+    now_int = int(time.time())
 
     if timestamp <= 0:
         raise WebhookVerificationError("Webhook timestamp must be a positive integer.")
 
-    if timestamp < now - tolerance:
+    if timestamp < now_int - tolerance:
         raise WebhookVerificationError("Webhook timestamp is too old.")
 
-    if timestamp > now + tolerance:
+    if timestamp > now_int + tolerance:
         raise WebhookVerificationError("Webhook timestamp is too far in the future.")
 
-    wid = resolved["webhook-id"]
-    wlid = resolved["webhook-log-id"]
-    signed_payload = f"{wid}.{wlid}.{timestamp_str}.{payload}"
+    signed_payload = (
+        f"{resolved['webhook-id']}.{resolved['webhook-log-id']}.{timestamp_str}.{payload}"
+    )
 
     raw_secret = secret[6:] if secret.startswith("whsec_") else secret
+
     try:
-        decoded_secret = base64.b64decode(raw_secret)
+        decoded_secret = base64.b64decode(raw_secret, validate=True)
     except Exception:
         raise WebhookSigningError("Webhook secret could not be decoded.")
 
     if len(decoded_secret) == 0:
         raise WebhookSigningError("Webhook secret could not be decoded.")
 
-    hex_hash = hmac.new(decoded_secret, signed_payload.encode(), hashlib.sha256).hexdigest()
-    expected_signature = base64.b64encode(bytes.fromhex(hex_hash)).decode()
+    expected = hmac.new(decoded_secret, signed_payload.encode(), hashlib.sha256).digest()
+    expected_signature = base64.b64encode(expected).decode()
 
     entries = resolved["webhook-signature"].split(" ")
     match_found = False

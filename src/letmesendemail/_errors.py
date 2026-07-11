@@ -1,9 +1,15 @@
+"""Structured error classes for the SDK."""
+
 from __future__ import annotations
 
+import calendar
+import time
 from typing import Any
 
 
 class LetMeSendEmailError(Exception):
+    """Base error for all SDK errors."""
+
     def __init__(
         self,
         message: str,
@@ -24,19 +30,25 @@ class LetMeSendEmailError(Exception):
         self.raw_body = raw_body
 
 
-class ApiError(LetMeSendEmailError): ...
+class ApiError(LetMeSendEmailError):
+    """Server-side API error (5xx or unhandled status)."""
 
 
-class AuthenticationError(LetMeSendEmailError): ...
+class AuthenticationError(LetMeSendEmailError):
+    """401 Unauthorized — invalid or missing API key."""
 
 
-class AuthorizationError(LetMeSendEmailError): ...
+class AuthorizationError(LetMeSendEmailError):
+    """403 Forbidden — insufficient permissions."""
 
 
-class ValidationError(LetMeSendEmailError): ...
+class ValidationError(LetMeSendEmailError):
+    """400, 413, or 422 — request validation failed."""
 
 
 class RateLimitError(LetMeSendEmailError):
+    """429 Too Many Requests."""
+
     def __init__(
         self,
         message: str,
@@ -66,33 +78,67 @@ class RateLimitError(LetMeSendEmailError):
         self.reset_at = reset_at
 
 
-class NotFoundError(LetMeSendEmailError): ...
+class NotFoundError(LetMeSendEmailError):
+    """404 Not Found."""
 
 
-class ConflictError(LetMeSendEmailError): ...
+class ConflictError(LetMeSendEmailError):
+    """409 Conflict."""
 
 
-class NetworkError(LetMeSendEmailError): ...
+class NetworkError(LetMeSendEmailError):
+    """Transport-level failure (no HTTP response)."""
 
 
-class TimeoutError(LetMeSendEmailError): ...
+class TimeoutError(LetMeSendEmailError):
+    """Request timed out."""
 
 
-class WebhookVerificationError(LetMeSendEmailError): ...
+class WebhookVerificationError(LetMeSendEmailError):
+    """Webhook signature verification failed."""
 
 
-class WebhookSigningError(LetMeSendEmailError): ...
+class WebhookSigningError(LetMeSendEmailError):
+    """Webhook signing secret could not be decoded."""
+
+
+def _parse_retry_after(headers: dict[str, str]) -> int | None:
+    raw = headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        pass
+    try:
+        parsed = calendar.timegm(time.strptime(raw, "%a, %d %b %Y %H:%M:%S %Z"))
+        delay = parsed - int(time.time())
+        return delay if delay > 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_int_header(headers: dict[str, str], name: str) -> int | None:
+    val = headers.get(name)
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 def _error_from_response(
     status: int,
     body: dict[str, Any],
     headers: dict[str, str],
+    raw_text: str | None = None,
 ) -> LetMeSendEmailError:
+    """Map an HTTP status code and response body to a typed error."""
     message = body.get("message", "Unknown error.")
     api_code = body.get("name")
     validation_errors = body.get("errors")
-    raw_body_str = str(body)
+    raw_body_str = raw_text or str(body)
     request_id = headers.get("x-request-id")
 
     kwargs: dict[str, Any] = {
@@ -116,7 +162,7 @@ def _error_from_response(
     if status == 409:
         return ConflictError(**kwargs)
     if status == 429:
-        retry_after = _parse_int_header(headers, "retry-after")
+        retry_after = _parse_retry_after(headers)
         limit = _parse_int_header(headers, "x-ratelimit-limit")
         remaining = _parse_int_header(headers, "x-ratelimit-remaining")
         reset_at = headers.get("x-ratelimit-reset")
@@ -130,13 +176,3 @@ def _error_from_response(
     if status >= 500:
         return ApiError(**kwargs)
     return ApiError(**kwargs)
-
-
-def _parse_int_header(headers: dict[str, str], name: str) -> int | None:
-    val = headers.get(name)
-    if val is not None:
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            return None
-    return None

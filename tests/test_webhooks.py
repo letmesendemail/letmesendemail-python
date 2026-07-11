@@ -1,144 +1,200 @@
+"""Tests for webhook signature verification."""
+
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac
-import json
-import time
+from unittest.mock import patch
 
-from letmesendemail._errors import WebhookSigningError, WebhookVerificationError
+import pytest
+
+from letmesendemail import WebhookSigningError, WebhookVerificationError
 from letmesendemail.webhooks import verify_webhook
 
+RAW_SECRET = b"whsec_test_secret_key"
+SECRET_B64 = base64.b64encode(RAW_SECRET).decode()
+PAYLOAD = '{"event":"email.sent"}'
+WEBHOOK_ID = "msg_123"
+WEBHOOK_LOG_ID = "log_456"
+TIMESTAMP = "2000000000"
 
-def _make_webhook_data(payload: dict, secret: str, timestamp: int | None = None) -> dict:
-    ts = timestamp or int(time.time())
-    raw = json.dumps(payload)
-    raw_secret = secret[6:] if secret.startswith("whsec_") else secret
-    decoded = base64.b64decode(raw_secret)
+_SIGNED_PAYLOAD = f"{WEBHOOK_ID}.{WEBHOOK_LOG_ID}.{TIMESTAMP}.{PAYLOAD}"
+_EXPECTED_SIG = base64.b64encode(
+    hmac.new(RAW_SECRET, _SIGNED_PAYLOAD.encode(), hashlib.sha256).digest()
+).decode()
 
-    to_sign = f"web_123.web_log_123.{ts}.{raw}"
-    hex_hash = hmac.new(decoded, to_sign.encode(), hashlib.sha256).hexdigest()
-    signature = base64.b64encode(bytes.fromhex(hex_hash)).decode()
+VALID_HEADERS: dict[str, str] = {
+    "webhook-id": WEBHOOK_ID,
+    "webhook-log-id": WEBHOOK_LOG_ID,
+    "webhook-timestamp": TIMESTAMP,
+    "webhook-signature": f"v1,{_EXPECTED_SIG}",
+}
 
-    return {
-        "payload": raw,
-        "headers": {
-            "webhook-id": "web_123",
-            "webhook-log-id": "web_log_123",
-            "webhook-timestamp": str(ts),
-            "webhook-signature": f"v1,{signature}",
-        },
+
+def test_valid_signature() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64)
+    assert result == {"event": "email.sent"}
+
+
+def test_valid_signature_whsec_prefix() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, VALID_HEADERS, f"whsec_{SECRET_B64}")
+    assert result == {"event": "email.sent"}
+
+
+def test_wrong_secret() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        with pytest.raises(WebhookVerificationError):
+            verify_webhook(PAYLOAD, VALID_HEADERS, base64.b64encode(b"wrong_secret").decode())
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "webhook-id",
+        "webhook-log-id",
+        "webhook-timestamp",
+        "webhook-signature",
+    ],
+)
+def test_missing_header(missing: str) -> None:
+    headers = dict(VALID_HEADERS)
+    del headers[missing]
+    with pytest.raises(WebhookVerificationError):
+        verify_webhook(PAYLOAD, headers, SECRET_B64)
+
+
+def test_expired_timestamp() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000060000):
+        with pytest.raises(WebhookVerificationError):
+            verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64)
+
+
+def test_future_timestamp() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=1999940000):
+        with pytest.raises(WebhookVerificationError):
+            verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64)
+
+
+def test_non_numeric_timestamp() -> None:
+    headers = dict(VALID_HEADERS)
+    headers["webhook-timestamp"] = "abc"
+    with pytest.raises(WebhookVerificationError):
+        verify_webhook(PAYLOAD, headers, SECRET_B64)
+
+
+def test_zero_timestamp() -> None:
+    headers = dict(VALID_HEADERS)
+    headers["webhook-timestamp"] = "0"
+    with pytest.raises(WebhookVerificationError):
+        verify_webhook(PAYLOAD, headers, SECRET_B64)
+
+
+def test_multiple_signatures_one_matches() -> None:
+    wrong_secret = b"wrong_secret"
+    wrong_sig = base64.b64encode(
+        hmac.new(wrong_secret, _SIGNED_PAYLOAD.encode(), hashlib.sha256).digest()
+    ).decode()
+    headers = dict(VALID_HEADERS)
+    headers["webhook-signature"] = f"v1,{wrong_sig} v1,{_EXPECTED_SIG}"
+
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, headers, SECRET_B64)
+    assert result == {"event": "email.sent"}
+
+
+def test_no_v1_match() -> None:
+    headers = dict(VALID_HEADERS)
+    headers["webhook-signature"] = f"v2,{_EXPECTED_SIG}"
+
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        with pytest.raises(WebhookVerificationError):
+            verify_webhook(PAYLOAD, headers, SECRET_B64)
+
+
+@pytest.mark.parametrize("key", ["Webhook-Id", "WEBHOOK-ID", "Webhook_ID"])
+def test_case_insensitive_headers(key: str) -> None:
+    headers = {
+        key: WEBHOOK_ID,
+        "webhook-log-id": WEBHOOK_LOG_ID,
+        "webhook-timestamp": TIMESTAMP,
+        "webhook-signature": f"v1,{_EXPECTED_SIG}",
     }
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, headers, SECRET_B64)
+    assert result == {"event": "email.sent"}
 
 
-class TestWebhooks:
-    def test_verifies_valid_signature(self):
-        raw_secret = base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
-        data = _make_webhook_data({"event": "email.sent"}, raw_secret)
-        result = verify_webhook(data["payload"], data["headers"], raw_secret)
-        assert result == {"event": "email.sent"}
+def test_http_prefixed_headers() -> None:
+    headers = {
+        "HTTP_WEBHOOK_ID": WEBHOOK_ID,
+        "HTTP_WEBHOOK_LOG_ID": WEBHOOK_LOG_ID,
+        "HTTP_WEBHOOK_TIMESTAMP": TIMESTAMP,
+        "HTTP_WEBHOOK_SIGNATURE": f"v1,{_EXPECTED_SIG}",
+    }
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, headers, SECRET_B64)
+    assert result == {"event": "email.sent"}
 
-    def test_verifies_with_whsec_prefix(self):
-        raw = base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
-        prefixed = f"whsec_{raw}"
-        data = _make_webhook_data({"event": "email.sent"}, prefixed)
-        result = verify_webhook(data["payload"], data["headers"], prefixed)
-        assert result == {"event": "email.sent"}
 
-    def test_fails_with_wrong_secret(self):
-        s1 = base64.b64encode(b"a" * 32).decode()
-        s2 = base64.b64encode(b"b" * 32).decode()
-        data = _make_webhook_data({"event": "test"}, s1)
-        import pytest
+def test_map_string_string_headers() -> None:
+    headers: dict[str, str] = {
+        "webhook-id": WEBHOOK_ID,
+        "webhook-log-id": WEBHOOK_LOG_ID,
+        "webhook-timestamp": TIMESTAMP,
+        "webhook-signature": f"v1,{_EXPECTED_SIG}",
+    }
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, headers, SECRET_B64)
+    assert result == {"event": "email.sent"}
 
+
+def test_map_string_list_headers() -> None:
+    headers: dict[str, list[str]] = {
+        "webhook-id": [WEBHOOK_ID],
+        "webhook-log-id": [WEBHOOK_LOG_ID],
+        "webhook-timestamp": [TIMESTAMP],
+        "webhook-signature": [f"v1,{_EXPECTED_SIG}"],
+    }
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, headers, SECRET_B64)
+    assert result == {"event": "email.sent"}
+
+
+def test_invalid_payload_json() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         with pytest.raises(WebhookVerificationError):
-            verify_webhook(data["payload"], data["headers"], s2)
+            verify_webhook("not-json", VALID_HEADERS, SECRET_B64)
 
-    def test_fails_expired_timestamp(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        old_ts = int(time.time()) - 600
-        data = _make_webhook_data({"event": "test"}, secret, old_ts)
-        import pytest
 
-        with pytest.raises(WebhookVerificationError, match="too old"):
-            verify_webhook(data["payload"], data["headers"], secret)
-
-    def test_fails_future_timestamp(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        future_ts = int(time.time()) + 600
-        data = _make_webhook_data({"event": "test"}, secret, future_ts)
-        import pytest
-
-        with pytest.raises(WebhookVerificationError, match="too far"):
-            verify_webhook(data["payload"], data["headers"], secret)
-
-    def test_fails_missing_headers(self):
-        import pytest
-
+def test_non_dict_payload() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         with pytest.raises(WebhookVerificationError):
-            verify_webhook("{}", {}, "secret")
+            verify_webhook("[]", VALID_HEADERS, SECRET_B64)
 
-    def test_fails_non_numeric_timestamp(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        data = _make_webhook_data({"event": "test"}, secret)
-        data["headers"]["webhook-timestamp"] = "not-a-number"
-        import pytest
 
-        with pytest.raises(WebhookVerificationError, match="not numeric"):
-            verify_webhook(data["payload"], data["headers"], secret)
-
-    def test_supports_multi_signature(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        data = _make_webhook_data({"event": "test"}, secret)
-        data["headers"]["webhook-signature"] = f"v1,badsig {data['headers']['webhook-signature']}"
-        result = verify_webhook(data["payload"], data["headers"], secret)
-        assert result == {"event": "test"}
-
-    def test_ignores_unknown_versions(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        data = _make_webhook_data({"event": "test"}, secret)
-        data["headers"]["webhook-signature"] = f"v2,ignored {data['headers']['webhook-signature']}"
-        result = verify_webhook(data["payload"], data["headers"], secret)
-        assert result == {"event": "test"}
-
-    def test_supports_lowercase_headers(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        data = _make_webhook_data({"event": "test"}, secret)
-        lower = {k.lower(): v for k, v in data["headers"].items()}
-        result = verify_webhook(data["payload"], lower, secret)
-        assert result == {"event": "test"}
-
-    def test_fails_malformed_json(self):
-        secret = base64.b64encode(b"a" * 32).decode()
-        ts = int(time.time())
-        bad_payload = "not-json"
-        to_sign = f"web_123.web_log_123.{ts}.{bad_payload}"
-        hex_hash = hmac.new(base64.b64decode(secret), to_sign.encode(), hashlib.sha256).hexdigest()
-        sig = base64.b64encode(bytes.fromhex(hex_hash)).decode()
-        import pytest
-
-        with pytest.raises(WebhookVerificationError):
-            verify_webhook(
-                bad_payload,
-                {
-                    "webhook-id": "web_123",
-                    "webhook-log-id": "web_log_123",
-                    "webhook-timestamp": str(ts),
-                    "webhook-signature": f"v1,{sig}",
-                },
-                secret,
-            )
-
-    def test_fails_bad_secret(self):
-        import pytest
-
-        ts = int(time.time())
+def test_bad_secret_not_base64() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         with pytest.raises(WebhookSigningError):
-            verify_webhook(
-                "{}",
-                {
-                    "webhook-id": "id",
-                    "webhook-log-id": "log",
-                    "webhook-timestamp": str(ts),
-                    "webhook-signature": "v1,sig",
-                },
-                "not-base64!!!?",
-            )
+            verify_webhook(PAYLOAD, VALID_HEADERS, "!!!")
+
+
+def test_whsec_prefixed_secret() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        result = verify_webhook(PAYLOAD, VALID_HEADERS, f"whsec_{SECRET_B64}")
+    assert result == {"event": "email.sent"}
+
+
+def test_custom_tolerance() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        tolerance = 60
+        result = verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64, tolerance=tolerance)
+    assert result == {"event": "email.sent"}
+
+
+def test_empty_secret_raises_signing_error() -> None:
+    with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
+        with pytest.raises(WebhookSigningError):
+            verify_webhook(PAYLOAD, VALID_HEADERS, base64.b64encode(b"").decode())

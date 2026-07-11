@@ -1,3 +1,5 @@
+"""letmesend.email Python SDK."""
+
 from letmesendemail._client import LetMeSendEmail
 from letmesendemail._errors import (
     ApiError,
@@ -13,6 +15,7 @@ from letmesendemail._errors import (
     WebhookSigningError,
     WebhookVerificationError,
 )
+from letmesendemail._models import ContactUpdateResponse, SendAttachment
 from letmesendemail.webhooks import verify_webhook
 
 __all__ = [
@@ -29,5 +32,7 @@ __all__ = [
     "ValidationError",
     "WebhookVerificationError",
     "WebhookSigningError",
+    "ContactUpdateResponse",
+    "SendAttachment",
     "verify_webhook",
 ]
