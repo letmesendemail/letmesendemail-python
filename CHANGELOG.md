@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-07-11
 
+- Added `to_dict()` method to every response model for dictionary serialization.
+- Added comprehensive `docs/docs.md` user manual covering all resources,
+  configuration, retries, errors, webhooks, and pagination.
+- README now links to the full user manual.
 - Webhook signature verification: use raw HMAC bytes (not hex), strict Base64
   validation on the secret, and empty-secret rejection.
 - Exact User-Agent test compares against `importlib.metadata.version("letmesendemail")`.
