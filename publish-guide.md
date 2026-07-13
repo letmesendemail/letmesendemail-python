@@ -51,10 +51,11 @@ Fix any failures before proceeding.
 # 1. Update the version in pyproject.toml (single source of truth)
 # 2. Move Unreleased entries in CHANGELOG.md to a new version section
 # 3. Commit all changes
+git add -A
 git commit -m "Release vX.Y.Z"
 
 # 4. Tag and push both master and the tag
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin master vX.Y.Z
 ```
 
@@ -72,14 +73,15 @@ python3 -m build
 # Verify the built packages
 twine check dist/*
 
-# Upload (requires API token)
-python3 -m twine upload dist/* --username __token__ --password pypi-your-api-token
+# Upload (Twine prompts for the token without storing it in shell history)
+python3 -m twine upload dist/* --username __token__
 ```
 
 The `--username __token__` flag tells Twine to use token-based authentication.
-Replace `pypi-your-api-token` with the actual token from
-[pypi.org/manage/account/token](https://pypi.org/manage/account/token).
-Tokens are scoped to the entire account or to individual projects.
+Enter the token only at Twine's password prompt. For non-interactive release
+automation, provide it through the CI secret `TWINE_PASSWORD`; never place the
+token directly in a command, tracked file, or shell history. Tokens are scoped
+to the entire account or to individual projects.
 
 ## Creating a GitHub Release
 

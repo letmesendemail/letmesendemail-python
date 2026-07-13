@@ -566,26 +566,29 @@ When a request times out, a `TimeoutError` is raised.
 Webhook signature verification is built into the SDK.
 
 ```python
+import os
+from typing import Any
+
 from letmesendemail import verify_webhook
 
-# Read the raw request body from your web framework
-raw_payload = request.body.read().decode("utf-8")
+def handle_webhook(raw_payload: str, incoming_headers: dict[str, str]) -> dict[str, Any]:
+    """Verify the framework's unmodified request body and incoming headers."""
+    webhook_secret = os.environ.get("LETMESENDEMAIL_WEBHOOK_SECRET")
+    if not webhook_secret:
+        raise RuntimeError("LETMESENDEMAIL_WEBHOOK_SECRET environment variable is not set.")
 
-# Pass the incoming headers (case-insensitive, HTTP_ prefix supported)
-incoming_headers = dict(request.headers)
-
-try:
-    event = verify_webhook(
+    return verify_webhook(
         payload=raw_payload,
         headers=incoming_headers,
-        secret="whsec_your_signing_secret",
+        secret=webhook_secret,
     )
-    print(event["event"])
-except WebhookVerificationError as e:
-    print(f"Verification failed: {e}")
-except WebhookSigningError as e:
-    print(f"Signing error: {e}")
 ```
+
+Pass the exact raw body text—before JSON parsing—and the incoming headers from
+your framework. Handle `WebhookVerificationError` as an invalid request and
+`WebhookSigningError` as a server configuration error. The returned dictionary
+contains the verified payload; its application-specific fields depend on the
+webhook payload delivered by the API.
 
 ### Verification Details
 
@@ -624,38 +627,123 @@ are accepted.
 - Valid JSON that is not an object (array, string, number, null) raises
   `WebhookVerificationError` ("must be a JSON object").
 
-## Response Models
+## Model Serialization and Database Storage
 
-Every response object provides attribute access for its fields and a `to_dict()`
-method returning the data as a plain dictionary with snake_case keys:
+Every typed response model provides a `to_dict()` method that returns a plain
+dictionary suitable for JSON encoding, database storage, caching, or logging.
+Request attachments use the public `SendAttachment` `TypedDict`, so they are
+already plain dictionaries and do not require conversion.
+
+### Serialization Mechanism
+
+The SDK uses Python dataclasses. The `to_dict()` method uses
+`dataclasses.asdict()` to recursively convert the model and all nested
+models into plain dictionaries.
 
 ```python
-detail = client.emails.get("01kvv5dv472evp42a60sy4p7zx")
+import json
+from letmesendemail import LetMeSendEmail
 
-# Object access via attributes
-print(detail.status)
+client = LetMeSendEmail("lms_live_your_api_key")
 
-# Dict access via to_dict()
-data = detail.to_dict()
-print(data["status"])
-print(data["recipients"])
+email = client.emails.get("email_abc123")
+data = email.to_dict()
+
+# Standard JSON encoding
+json_str = json.dumps(data, indent=2)
+
+# Database storage via application code
+def save_record(table: str, record: dict) -> None:
+    # Application-owned database implementation
+    ...
+
+save_record("emails", data)
 ```
 
-The `to_dict()` method is available on all response models, including:
+### Supported Models
 
-- `SendEmailResponse`
-- `VerifyEmailResponse`
-- `EmailListResponse` (items contain `EmailListItem` with `to_dict()`)
-- `ShowEmailResponse` (recipients and attachments contain their own `to_dict()`)
-- `ContactItem`, `ContactListResponse`
+Every public response model supports `to_dict()`:
+
+- `SendEmailResponse`, `VerifyEmailResponse`
+- `EmailListItem`, `EmailListResponse`
+- `ShowEmailResponse`, `Recipient`, `EmailAttachment`
 - `DomainItem`, `DomainListResponse`
+- `ContactItem`, `ContactListResponse`, `ContactUpdateResponse`
 - `ContactCategoryItem`, `ContactCategoryListResponse`
 - `EmailTopicItem`, `EmailTopicListResponse`
-- `Recipient`
-- `EmailAttachment`
-- `PaginationInfo`
-- `StatusResponse`
-- `ContactUpdateResponse`
+- `PaginationInfo`, `StatusResponse`
+
+The public `SendAttachment` request type can be passed directly to
+`json.dumps()` or copied with `dict(attachment)`:
+
+```python
+from letmesendemail import SendAttachment
+
+attachment: SendAttachment = {
+    "name": "report.pdf",
+    "content": "cGRmLWNvbnRlbnQ=",
+    "mime": "application/pdf",
+    "content_disposition": "attachment",
+}
+
+serialized_attachment = dict(attachment)
+```
+
+### Nested Conversion
+
+Nested dataclass models are converted recursively:
+
+```python
+email = client.emails.get("email_abc123")
+data = email.to_dict()
+
+# Recipients is a list of dicts with snake_case keys
+for recipient in data["recipients"]:
+    print(recipient["email_address"], recipient["open_count"])
+
+# Attachments is a list of dicts
+for att in data["attachments"]:
+    print(att["name"], att["size"], att["download_url"])
+```
+
+### List Responses
+
+List responses include both the `data` array and `pagination` metadata:
+
+```python
+page = client.emails.list(per_page=10)
+data = page.to_dict()
+
+items = data["data"]
+pagination = data["pagination"]
+print(pagination["has_more"], pagination["total"])
+```
+
+### Field Naming
+
+Field names use the SDK's snake_case convention matching the API response
+format:
+
+- `created_at`
+- `email_address`
+- `has_more`
+- `open_count`
+- `download_url`
+
+### Behavior Notes
+
+- Null optional fields are serialized as `None`.
+- Boolean values are preserved as Python `bool` types.
+- Numeric values are preserved as Python `int` types.
+- String values including dates (ISO 8601) and identifiers are preserved as
+  Python `str` types.
+- Lists are preserved as Python `list`.
+- Empty lists are serialized as `[]`.
+- Dictionaries are preserved as Python `dict`.
+- The returned dictionary is a copy; mutating it does not affect the source
+  model.
+- API keys, webhook secrets, HTTP clients, and internal SDK state are never
+  included in the output.
 
 ## Testing
 
@@ -685,7 +773,7 @@ pyright
 
 ## Upgrading
 
-### From 0.1.0 to Unreleased
+### From 0.1.0 to 0.2.0
 
 - Retry logic was rewritten for conservative, bounded exponential backoff
   with jitter. 429 responses without a valid `Retry-After` are now thrown

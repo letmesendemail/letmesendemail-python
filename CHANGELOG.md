@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 — 2026-07-13
+
+- Added comprehensive serialization tests for every public response model,
+  nested models, pagination metadata, optional values, defensive copies, and
+  standard JSON encoding.
+- Documented `to_dict()` for application storage and serialization workflows.
+- Documented that the public `SendAttachment` request type is already a plain,
+  JSON-serializable dictionary.
+- Replaced undocumented webhook event payloads in tests and documentation with
+  generic verified payload data.
+- Updated the runnable send example to require `LETMESENDEMAIL_API_KEY`, close
+  the client deterministically, and handle SDK errors without a fake-key fallback.
+
 ## 0.2.0 — 2026-07-11
 
 - Added `to_dict()` method to every response model for dictionary serialization.

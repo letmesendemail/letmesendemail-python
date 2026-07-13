@@ -14,7 +14,7 @@ from letmesendemail.webhooks import verify_webhook
 
 RAW_SECRET = b"whsec_test_secret_key"
 SECRET_B64 = base64.b64encode(RAW_SECRET).decode()
-PAYLOAD = '{"event":"email.sent"}'
+PAYLOAD = '{"sample":"value"}'
 WEBHOOK_ID = "msg_123"
 WEBHOOK_LOG_ID = "log_456"
 TIMESTAMP = "2000000000"
@@ -35,13 +35,13 @@ VALID_HEADERS: dict[str, str] = {
 def test_valid_signature() -> None:
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_valid_signature_whsec_prefix() -> None:
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, VALID_HEADERS, f"whsec_{SECRET_B64}")
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_wrong_secret() -> None:
@@ -102,7 +102,7 @@ def test_multiple_signatures_one_matches() -> None:
 
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, headers, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_no_v1_match() -> None:
@@ -124,7 +124,7 @@ def test_case_insensitive_headers(key: str) -> None:
     }
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, headers, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_http_prefixed_headers() -> None:
@@ -136,7 +136,7 @@ def test_http_prefixed_headers() -> None:
     }
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, headers, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_map_string_string_headers() -> None:
@@ -148,7 +148,7 @@ def test_map_string_string_headers() -> None:
     }
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, headers, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_map_string_list_headers() -> None:
@@ -160,7 +160,7 @@ def test_map_string_list_headers() -> None:
     }
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, headers, SECRET_B64)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_invalid_payload_json() -> None:
@@ -184,14 +184,14 @@ def test_bad_secret_not_base64() -> None:
 def test_whsec_prefixed_secret() -> None:
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         result = verify_webhook(PAYLOAD, VALID_HEADERS, f"whsec_{SECRET_B64}")
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_custom_tolerance() -> None:
     with patch("letmesendemail.webhooks.time.time", return_value=2000000000):
         tolerance = 60
         result = verify_webhook(PAYLOAD, VALID_HEADERS, SECRET_B64, tolerance=tolerance)
-    assert result == {"event": "email.sent"}
+    assert result == {"sample": "value"}
 
 
 def test_empty_secret_raises_signing_error() -> None:
